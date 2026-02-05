@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  bmkg-bot:
+    build: .
+    container_name: bmkg_weather_bot
+    restart: unless-stopped
+    environment:
+      # Setup Timezone agar log sesuai WIB (jika perlu)
+      - TZ=Asia/Jakarta
+      # Environment Variables, bisa ditaruh sini atau baca dari .env file
+      # - TELEGRAM_TOKEN=your_token_here
+      # - TARGET_CHAT_ID=your_chat_id_here
+      # - FILTER_PROVINCE=Jawa Barat, Bali
+    env_file:
+      - .env
+    volumes:
+      # PENTING: Mount file history.json ke host agar data tidak hilang saat restart container
+      # Ini mencegah SPAM notifikasi ulang saat bot di-redeloy.
+      - ./history.json:/app/history.json
+    # Bot tidak perlu ports karena tidak membuka server web
+    # ports:
+    #   - "8080:8080"
