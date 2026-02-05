@@ -3,7 +3,7 @@ version: '3.8'
 services:
   bmkg-bot:
     build: .
-    container_name: bmkg_weather_bot
+    container_name: bmkg-bot
     restart: unless-stopped
     environment:
       # Setup Timezone agar log sesuai WIB (jika perlu)
