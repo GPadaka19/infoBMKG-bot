@@ -1,58 +1,65 @@
-# BMKG Weather Alert Telegram Bot
+# Bot Telegram Peringatan Dini Cuaca BMKG
 
-Bot Telegram sederhana yang ditulis dengan Go untuk memantau peringatan dini cuaca dari BMKG (Badan Meteorologi, Klimatologi, dan Geofisika) dan mengirimkan notifikasi real-time ke Telegram.
+Aplikasi ini adalah bot Telegram berbasis Go yang berfungsi untuk memantau dan mendistribusikan informasi peringatan dini cuaca secara waktu nyata (real-time) yang bersumber dari Badan Meteorologi, Klimatologi, dan Geofisika (BMKG).
 
-## 🚀 Fitur
+## Atribusi Sumber Data
 
-- 📡 **Real-time Polling**: Memantau feed RSS BMKG setiap 3 menit.
-- ⚡ **Cepat & Ringan**: Ditulis dengan Go, menggunakan Resty Client.
-- 💾 **Persistence Sederhana**: Menggunakan file JSON untuk menyimpan riwayat alert (tanpa database berat).
-- 🛡️ **Auto-Retry**: Otomatis mencoba ulang jika koneksi ke BMKG gagal.
-- 🐳 **Docker Ready**: Siap dijalankan di container (TODO).
+Seluruh data cuaca dan peringatan dini yang didistribusikan oleh aplikasi ini bersumber langsung dari portal Data Terbuka BMKG. Aplikasi ini dikembangkan dengan mematuhi pedoman penggunaan data yang ditetapkan oleh penyedia data.
 
-## 🛠️ Cara Menjalankan
+- **Sumber Data Utama**: [Badan Meteorologi, Klimatologi, dan Geofisika (BMKG)](https://data.bmkg.go.id/)
+- **Referensi Format Data**: [Repository infoBMKG/data-cap](https://github.com/infoBMKG/data-cap)
 
-### Prasyarat
-- Go 1.21+
+## Fitur Utama
 
-### 1. Set Environment Variables
+1.  **Pemantauan Real-time**: Aplikasi melakukan pemantauan berkala terhadap umpan data (feed) peringatan dini BMKG untuk mendeteksi pembaruan terkini.
+2.  **Notifikasi Visual**: Menyertakan infografis resmi dari BMKG dalam pesan notifikasi apabila tersedia, memberikan informasi visual yang lebih jelas kepada pengguna.
+3.  **Penyaring Wilayah (Filter)**: Mendukung konfigurasi untuk memfilter notifikasi berdasarkan provinsi tertentu, sehingga pengguna hanya menerima informasi yang relevan.
+4.  **Mekanisme Percobaan Ulang (Auto-Retry)**: Dilengkapi dengan mekanisme penanganan kesalahan jaringan yang secara otomatis mencoba kembali permintaan data apabila terjadi kegagalan koneksi.
+5.  **Efisiensi Penyimpanan**: Menggunakan sistem penyimpanan berbasis berkas (file-based persistence) yang ringan untuk mencegah duplikasi notifikasi.
 
-Anda perlu Token Bot Telegram dan Chat ID tujuan notifikasi.
+## Prasyarat Sistem
 
-**Windows (PowerShell):**
-```powershell
-$env:TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
-$env:TARGET_CHAT_ID = "YOUR_CHAT_ID_HERE"
-go run cmd/main.go
+- **Go**: Versi 1.21 atau yang lebih baru.
+- **Koneksi Internet**: Diperlukan untuk mengakses API BMKG dan API Telegram.
+
+## Konfigurasi
+
+Sebelum menjalankan aplikasi, konfigurasi lingkungan kerja diperlukan melalui berkas `.env`. Buatlah berkas `.env` dengan parameter berikut:
+
+```env
+TELEGRAM_TOKEN=token_bot_telegram_anda
+TARGET_CHAT_ID=id_chat_tujuan_notifikasi
+FILTER_PROVINCE=Jawa Barat, DKI Jakarta, Bali
 ```
 
-**Linux/Mac:**
-```bash
-export TELEGRAM_TOKEN="YOUR_BOT_TOKEN_HERE"
-export TARGET_CHAT_ID="YOUR_CHAT_ID_HERE"
-go run cmd/main.go
-```
+### Keterangan Parameter:
+- `TELEGRAM_TOKEN`: Token akses bot yang didapatkan dari BotFather.
+- `TARGET_CHAT_ID`: ID numerik (Chat ID) pengguna atau grup Telegram tujuan pengiriman notifikasi.
+- `FILTER_PROVINCE` (Opsional): Daftar nama provinsi yang ingin dipantau, dipisahkan dengan koma. Kosongkan jika ingin menerima notifikasi dari seluruh Indonesia.
 
-### 2. Mode Dry Run (Tanpa Token)
-Jika dijalankan tanpa token, bot akan berjalan dalam mode **Dry Run**, di mana notifikasi hanya akan dicetak ke terminal (console output) untuk tujuan debugging.
+## Cara Penggunaan
 
-```bash
-go run cmd/main.go
-```
+1.  Pastikan dependensi telah terunduh:
+    ```bash
+    go mod tidy
+    ```
 
-## 📂 Struktur Proyek
+2.  Jalankan aplikasi:
+    ```bash
+    go run cmd/main.go
+    ```
 
-```
-bmkg-telegram-bot/
-├── cmd/
-│   └── main.go              # Entry point aplikasi
-├── internal/
-│   ├── bmkg/                # Client API BMKG (Resty)
-│   ├── bot/                 # Wrapper API Telegram
-│   ├── model/               # Struktur Data XML
-│   └── storage/             # Logika penyimpanan (JSON)
-└── history.json             # File penyimpanan riwayat (auto-generated)
-```
+3.  Aplikasi akan secara otomatis membuat berkas `history.json` untuk menyimpan riwayat peringatan yang telah diproses.
 
-## ⚠️ Lisensi & Atribut
-Data cuaca disediakan oleh [BMKG](https://data.bmkg.go.id/). Bot ini mematuhi aturan atribusi dengan mencantumkan sumber data pada setiap notifikasi.
+## Struktur Direktori
+
+- `cmd/`: Berisi titik masuk (entry point) aplikasi.
+- `internal/`: Berisi logika inti aplikasi yang terbagi menjadi modul-modul:
+    - `bmkg`: Klien HTTP untuk berinteraksi dengan layanan data BMKG.
+    - `bot`: Layanan penghubung dengan API Telegram.
+    - `model`: Definisi struktur data XML (CAP).
+    - `storage`: Manajemen penyimpanan riwayat data.
+
+## Lisensi dan Penafian
+
+Aplikasi ini disediakan sebagai alat bantu distribusi informasi. Pengguna wajib tetap merujuk pada kanal informasi resmi BMKG untuk keputusan-keputusan krusial terkait keselamatan. Pengembang aplikasi tidak bertanggung jawab atas keterlambatan atau ketidakakuratan data yang mungkin terjadi akibat gangguan jaringan atau perubahan format data dari sumber aslinya.
