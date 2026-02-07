@@ -51,8 +51,22 @@ func NewClient(gatewayURL, targetPhone, user, password string) *Client {
 	}
 }
 
-// formatPhoneNumber sanitizes phone number to international format
+// formatPhoneNumber formats phone/group ID for WhatsApp gateway
+// Formats supported:
+// - Group: 120363xxx@g.us (left as-is)
+// - Individual: 6281xxx@s.whatsapp.net or just 6281xxx
 func formatPhoneNumber(phone string) string {
+	// If already contains @g.us (group), return as-is
+	if strings.Contains(phone, "@g.us") {
+		return phone
+	}
+
+	// If already contains @s.whatsapp.net (individual), return as-is
+	if strings.Contains(phone, "@s.whatsapp.net") {
+		return phone
+	}
+
+	// Sanitize phone number for individual
 	reg, _ := regexp.Compile("[^0-9]+")
 	clean := reg.ReplaceAllString(phone, "")
 	if strings.HasPrefix(clean, "08") {
