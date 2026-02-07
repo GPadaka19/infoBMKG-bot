@@ -29,9 +29,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/bmkg-bot .
 
-# Create a non-root user for security
-RUN adduser -D botuser
-USER botuser
+# Create a non-root user (Disabled to fix volume permission issues on server)
+# RUN adduser -D botuser
+# USER botuser
 
 # We don't need to EXPOSE any port because this is a polling bot (outbound client)
 
