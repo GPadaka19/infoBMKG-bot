@@ -137,7 +137,7 @@ func processUpdate(client *bmkg.Client, history *storage.History, waClient *what
 			}
 
 			// 1. Send Notification
-			sendNotification(waClient, client, item, photoURL)
+			sendNotification(waClient, item, photoURL)
 
 			// 2. Add to History (Mark as seen)
 			if err := history.Add(guid); err != nil {
@@ -153,7 +153,7 @@ func processUpdate(client *bmkg.Client, history *storage.History, waClient *what
 	}
 }
 
-func sendNotification(waClient *whatsapp.Client, client *bmkg.Client, item model.Item, photoURL string) {
+func sendNotification(waClient *whatsapp.Client, item model.Item, photoURL string) {
 	// Construct message - WhatsApp format (plain text with emoji, no HTML)
 	body := strings.TrimSpace(item.Description)
 
@@ -205,22 +205,17 @@ func sendNotification(waClient *whatsapp.Client, client *bmkg.Client, item model
 		return
 	}
 
-	// Logic: Try SendPhoto first if we have an image
+	// Logic: Try SendPhoto first if we have an image URL
 	var err error
 	sent := false
 
 	if photoURL != "" {
-		// Download image first
-		imgBytes, errDown := client.DownloadImage(photoURL)
-		if errDown == nil {
-			err = waClient.SendPhoto(imgBytes, caption)
-			if err == nil {
-				sent = true
-			} else {
-				log.Printf("Failed to send photo via WhatsApp: %v. Falling back to text.", err)
-			}
+		// Send image via URL - gateway will download it
+		err = waClient.SendPhoto(photoURL, caption)
+		if err == nil {
+			sent = true
 		} else {
-			log.Printf("Failed to download photo content: %v. Falling back to text.", errDown)
+			log.Printf("Failed to send photo via WhatsApp: %v. Falling back to text.", err)
 		}
 	}
 

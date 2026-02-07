@@ -2,7 +2,6 @@ package whatsapp
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,11 +28,12 @@ type TextPayload struct {
 	Message string `json:"message"`
 }
 
-// ImagePayload for sending images with caption
+// ImagePayload for sending images with caption via URL
 type ImagePayload struct {
-	Phone   string `json:"phone"`
-	Caption string `json:"caption"`
-	Image   string `json:"image"` // base64 encoded image
+	Phone    string `json:"phone"`
+	Caption  string `json:"caption"`
+	ImageURL string `json:"image_url"`
+	Compress bool   `json:"compress"`
 }
 
 // NewClient creates a new WhatsApp client
@@ -123,9 +123,9 @@ func (c *Client) SendMessage(text string) error {
 	return err
 }
 
-// SendPhoto sends an image with caption (auto-healing enabled)
-func (c *Client) SendPhoto(imageBytes []byte, caption string) error {
-	err := c.sendImage(imageBytes, caption)
+// SendPhoto sends an image with caption via URL (auto-healing enabled)
+func (c *Client) SendPhoto(imageURL string, caption string) error {
+	err := c.sendImage(imageURL, caption)
 	if err == nil {
 		return nil
 	}
@@ -135,7 +135,7 @@ func (c *Client) SendPhoto(imageBytes []byte, caption string) error {
 		log.Println("🚑 [HEALING] Reconnecting...")
 		c.triggerReconnect()
 		time.Sleep(5 * time.Second)
-		return c.sendImage(imageBytes, caption)
+		return c.sendImage(imageURL, caption)
 	}
 	return err
 }
@@ -165,22 +165,20 @@ func (c *Client) sendText(text string) error {
 	return nil
 }
 
-// sendImage sends an image with caption
-func (c *Client) sendImage(imageBytes []byte, caption string) error {
+// sendImage sends an image via URL with caption
+func (c *Client) sendImage(imageURL string, caption string) error {
 	// Build image endpoint URL (replace /send/message with /send/image)
-	imageURL := strings.Replace(c.gatewayURL, "/send/message", "/send/image", 1)
-
-	// Encode image to base64
-	base64Image := base64.StdEncoding.EncodeToString(imageBytes)
+	endpointURL := strings.Replace(c.gatewayURL, "/send/message", "/send/image", 1)
 
 	payload := ImagePayload{
-		Phone:   c.targetPhone,
-		Caption: caption,
-		Image:   base64Image,
+		Phone:    c.targetPhone,
+		Caption:  caption,
+		ImageURL: imageURL,
+		Compress: true,
 	}
 	jsonData, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", imageURL, bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", endpointURL, bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
 	if c.user != "" {
 		req.SetBasicAuth(c.user, c.password)
