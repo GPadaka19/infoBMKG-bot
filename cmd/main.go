@@ -2,13 +2,12 @@ package main
 
 import (
 	"bmkg-bot/internal/bmkg"
-	"bmkg-bot/internal/bot"
 	"bmkg-bot/internal/model"
 	"bmkg-bot/internal/storage"
+	"bmkg-bot/internal/whatsapp"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,9 +16,12 @@ import (
 
 // Configuration variables
 var (
-	// Get from Environment Variables for security
-	BotToken     string
-	TargetChatID int64
+	// WhatsApp Configuration
+	WaGatewayURL  string
+	WaTargetPhone string
+	WaUser        string
+	WaPassword    string
+
 	PollInterval = 3 * time.Minute
 	FilteredProv []string // List of provinces to filter
 )
@@ -30,11 +32,11 @@ func main() {
 		log.Println("No .env file found, relying on system environment variables")
 	}
 
-	BotToken = os.Getenv("TELEGRAM_TOKEN")
-	chatIDStr := os.Getenv("TARGET_CHAT_ID")
-	if chatIDStr != "" {
-		TargetChatID, _ = strconv.ParseInt(chatIDStr, 10, 64)
-	}
+	// WhatsApp Config
+	WaGatewayURL = os.Getenv("WA_GATEWAY_URL")
+	WaTargetPhone = os.Getenv("WA_TARGET_PHONE")
+	WaUser = os.Getenv("WA_USER")
+	WaPassword = os.Getenv("WA_PASSWORD")
 
 	// Parse Province Filter
 	provStr := os.Getenv("FILTER_PROVINCE")
@@ -49,7 +51,7 @@ func main() {
 		log.Printf("Active Filter: %v", FilteredProv)
 	}
 
-	log.Println("Starting BMKG Weather Alert Bot...")
+	log.Println("Starting BMKG Weather Alert Bot (WhatsApp Edition)...")
 
 	// 1. Initialize Storage (History)
 	history := storage.NewHistory()
@@ -58,17 +60,20 @@ func main() {
 	// 2. Initialize BMKG Client
 	bmkgClient := bmkg.NewClient()
 
-	// 3. Initialize Telegram Bot
-	var telegramBot *bot.Bot
-	var err error
+	// 3. Initialize WhatsApp Client
+	var waClient *whatsapp.Client
 
-	if BotToken != "" {
-		telegramBot, err = bot.NewBot(BotToken)
-		if err != nil {
-			log.Fatalf("Failed to init Telegram Bot: %v", err)
+	if WaGatewayURL != "" && WaTargetPhone != "" {
+		waClient = whatsapp.NewClient(WaGatewayURL, WaTargetPhone, WaUser, WaPassword)
+
+		// Check connectivity
+		if err := waClient.CheckConnectivity(); err != nil {
+			log.Printf("⚠️ [WARN] WhatsApp Gateway connectivity issue: %v", err)
+		} else {
+			log.Println("✅ WhatsApp Gateway connected")
 		}
 	} else {
-		log.Println("WARNING: TELEGRAM_TOKEN is not set. Creating bot in DRY RUN mode (Console output only).")
+		log.Println("WARNING: WA_GATEWAY_URL or WA_TARGET_PHONE is not set. Creating bot in DRY RUN mode (Console output only).")
 	}
 
 	// 4. Start Polling Loop
@@ -76,14 +81,14 @@ func main() {
 	defer ticker.Stop()
 
 	// Run immediately once at startup
-	processUpdate(bmkgClient, history, telegramBot)
+	processUpdate(bmkgClient, history, waClient)
 
 	for range ticker.C {
-		processUpdate(bmkgClient, history, telegramBot)
+		processUpdate(bmkgClient, history, waClient)
 	}
 }
 
-func processUpdate(client *bmkg.Client, history *storage.History, bot *bot.Bot) {
+func processUpdate(client *bmkg.Client, history *storage.History, waClient *whatsapp.Client) {
 	log.Println("Checking for updates...")
 
 	// Fetch Indonesian feed
@@ -108,7 +113,6 @@ func processUpdate(client *bmkg.Client, history *storage.History, bot *bot.Bot) 
 				// Check Title ONLY (usually "... di <Provinsi>") to avoid false positives in description (e.g. "bali" in "kembali")
 				if strings.Contains(strings.ToLower(item.Title), strings.ToLower(p)) {
 					matched = true
-					// log.Printf("Matched filter: %s needed %s", item.Title, p)
 					break
 				}
 			}
@@ -133,8 +137,7 @@ func processUpdate(client *bmkg.Client, history *storage.History, bot *bot.Bot) 
 			}
 
 			// 1. Send Notification
-			// Pass client to download image
-			sendNotification(bot, client, item, photoURL)
+			sendNotification(waClient, client, item, photoURL)
 
 			// 2. Add to History (Mark as seen)
 			if err := history.Add(guid); err != nil {
@@ -150,24 +153,24 @@ func processUpdate(client *bmkg.Client, history *storage.History, bot *bot.Bot) 
 	}
 }
 
-func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL string) {
-	// Construct message
+func sendNotification(waClient *whatsapp.Client, client *bmkg.Client, item model.Item, photoURL string) {
+	// Construct message - WhatsApp format (plain text with emoji, no HTML)
 	body := strings.TrimSpace(item.Description)
 
 	message := fmt.Sprintf(
-		"⚠️ <b>PERINGATAN DINI CUACA</b> ⚠️\n\n"+
-			"<b>%s</b>\n\n"+
+		"⚠️ *PERINGATAN DINI CUACA* ⚠️\n\n"+
+			"*%s*\n\n"+
 			"%s\n\n"+
-			"🕒 <i>%s</i>\n"+
-			"🔗 <a href='%s'>Selengkapnya</a>\n\n"+
-			"📡 <i>Sumber Data: BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)</i>",
+			"🕒 _%s_\n"+
+			"🔗 %s\n\n"+
+			"📡 _Sumber Data: BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)_",
 		item.Title,
 		body,
 		item.PubDate,
 		item.Link,
 	)
 
-	// Truncate logic for Caption (Max 1024 chars in Telegram)
+	// Caption for photo (shorter version if needed)
 	caption := message
 	if len(caption) > 1000 {
 		// Cut body to fit
@@ -175,12 +178,12 @@ func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL
 		if allowedBody > 0 && len(body) > allowedBody {
 			truncatedBody := body[:allowedBody] + "..."
 			caption = fmt.Sprintf(
-				"⚠️ <b>PERINGATAN DINI CUACA</b> ⚠️\n\n"+
-					"<b>%s</b>\n\n"+
+				"⚠️ *PERINGATAN DINI CUACA* ⚠️\n\n"+
+					"*%s*\n\n"+
 					"%s\n\n"+
-					"🕒 <i>%s</i>\n"+
-					"🔗 <a href='%s'>Selengkapnya</a>\n\n"+
-					"📡 <i>Sumber Data: BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)</i>",
+					"🕒 _%s_\n"+
+					"🔗 %s\n\n"+
+					"📡 _Sumber Data: BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)_",
 				item.Title,
 				truncatedBody,
 				item.PubDate,
@@ -190,9 +193,9 @@ func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL
 	}
 
 	// Dry Run Check
-	if b == nil || TargetChatID == 0 {
+	if waClient == nil {
 		fmt.Println("---------------------------------------------------")
-		fmt.Println(" [DRY RUN] TELEGRAM MESSAGE PREVIEW:")
+		fmt.Println(" [DRY RUN] WHATSAPP MESSAGE PREVIEW:")
 		if photoURL != "" {
 			fmt.Printf(" [PHOTO] %s\n", photoURL)
 		}
@@ -202,7 +205,7 @@ func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL
 		return
 	}
 
-	// Logic: Try SendPhotoBytes first
+	// Logic: Try SendPhoto first if we have an image
 	var err error
 	sent := false
 
@@ -210,11 +213,11 @@ func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL
 		// Download image first
 		imgBytes, errDown := client.DownloadImage(photoURL)
 		if errDown == nil {
-			err = b.SendPhotoBytes(TargetChatID, imgBytes, caption)
+			err = waClient.SendPhoto(imgBytes, caption)
 			if err == nil {
 				sent = true
 			} else {
-				log.Printf("Failed to upload photo: %v. Falling back to text.", err)
+				log.Printf("Failed to send photo via WhatsApp: %v. Falling back to text.", err)
 			}
 		} else {
 			log.Printf("Failed to download photo content: %v. Falling back to text.", errDown)
@@ -223,9 +226,9 @@ func sendNotification(b *bot.Bot, client *bmkg.Client, item model.Item, photoURL
 
 	// Fallback to text if no photo or photo failed
 	if !sent {
-		err = b.SendMessage(TargetChatID, message)
+		err = waClient.SendMessage(message)
 		if err != nil {
-			log.Printf("Failed to send telegram message: %v", err)
+			log.Printf("Failed to send WhatsApp message: %v", err)
 		}
 	}
 }
