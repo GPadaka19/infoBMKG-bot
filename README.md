@@ -1,6 +1,6 @@
-# Bot Telegram Peringatan Dini Cuaca BMKG
+# Bot WhatsApp Peringatan Dini Cuaca BMKG
 
-Aplikasi ini adalah bot Telegram berbasis Go yang berfungsi untuk memantau dan mendistribusikan informasi peringatan dini cuaca secara waktu nyata (real-time) yang bersumber dari Badan Meteorologi, Klimatologi, dan Geofisika (BMKG).
+Aplikasi bot berbasis Go yang memantau dan mendistribusikan informasi peringatan dini cuaca secara real-time dari BMKG melalui WhatsApp.
 
 ## Atribusi Sumber Data
 
@@ -11,55 +11,86 @@ Seluruh data cuaca dan peringatan dini yang didistribusikan oleh aplikasi ini be
 
 ## Fitur Utama
 
-1.  **Pemantauan Real-time**: Aplikasi melakukan pemantauan berkala terhadap umpan data (feed) peringatan dini BMKG untuk mendeteksi pembaruan terkini.
-2.  **Notifikasi Visual**: Menyertakan infografis resmi dari BMKG dalam pesan notifikasi apabila tersedia, memberikan informasi visual yang lebih jelas kepada pengguna.
-3.  **Penyaring Wilayah (Filter)**: Mendukung konfigurasi untuk memfilter notifikasi berdasarkan provinsi tertentu, sehingga pengguna hanya menerima informasi yang relevan.
-4.  **Mekanisme Percobaan Ulang (Auto-Retry)**: Dilengkapi dengan mekanisme penanganan kesalahan jaringan yang secara otomatis mencoba kembali permintaan data apabila terjadi kegagalan koneksi.
-5.  **Efisiensi Penyimpanan**: Menggunakan sistem penyimpanan berbasis berkas (file-based persistence) yang ringan untuk mencegah duplikasi notifikasi.
+1.  **Pemantauan Real-time**: Polling otomatis terhadap RSS feed peringatan dini BMKG setiap 3 menit.
+2.  **Notifikasi WhatsApp**: Mengirim peringatan cuaca langsung ke nomor individu atau grup WhatsApp melalui WhatsApp Gateway.
+3.  **Notifikasi Visual**: Menyertakan infografis resmi dari BMKG (data CAP) dalam pesan notifikasi apabila tersedia.
+4.  **Penyaring Wilayah**: Mendukung filter notifikasi berdasarkan provinsi melalui environment variable.
+5.  **Deduplikasi Akurat**: Menggunakan alert link sebagai unique key untuk mencegah duplikasi, karena GUID BMKG mengandung timestamp yang berubah setiap jam.
+6.  **Auto-Retry & Self-Healing**: Mekanisme retry otomatis untuk koneksi HTTP, serta reconnect otomatis ke WhatsApp Gateway jika sesi terputus.
+7.  **Dry Run Mode**: Jika konfigurasi WhatsApp tidak diset, bot berjalan dalam mode console-only untuk pengujian.
+8.  **Docker Ready**: Dikontainerisasi dengan multi-stage Dockerfile dan Docker Compose untuk deployment yang mudah.
 
 ## Prasyarat Sistem
 
-- **Go**: Versi 1.21 atau yang lebih baru.
-- **Koneksi Internet**: Diperlukan untuk mengakses API BMKG dan API Telegram.
+- **Go**: Versi 1.24 atau lebih baru.
+- **WhatsApp Gateway**: Instansi [go-whatsapp-web-multidevice](https://github.com/AdiKhoworker/go-whatsapp-web-multidevice) yang sudah berjalan.
+- **Docker** (opsional): Untuk deployment via container.
 
 ## Konfigurasi
 
-Sebelum menjalankan aplikasi, konfigurasi lingkungan kerja diperlukan melalui berkas `.env`. Buatlah berkas `.env` dengan parameter berikut:
+Salin `.env.example` menjadi `.env` dan sesuaikan parameternya:
 
 ```env
-TELEGRAM_TOKEN=token_bot_telegram_anda
-TARGET_CHAT_ID=id_chat_tujuan_notifikasi
-FILTER_PROVINCE=Jawa Barat, DKI Jakarta, Bali
+# WhatsApp Gateway Configuration
+WA_GATEWAY_URL=http://gowa:3006/whatsapp/send/message
+# Untuk individu: 6281xxx atau 6281xxx@s.whatsapp.net
+# Untuk grup: 120363xxx@g.us
+WA_TARGET_PHONE=6281xxx
+WA_USER=
+WA_PASSWORD=
+
+# Filter Provinsi (opsional, pisahkan dengan koma)
+FILTER_PROVINCE=DI Yogyakarta, Jawa Tengah
 ```
 
-### Keterangan Parameter:
-- `TELEGRAM_TOKEN`: Token akses bot yang didapatkan dari BotFather.
-- `TARGET_CHAT_ID`: ID numerik (Chat ID) pengguna atau grup Telegram tujuan pengiriman notifikasi.
-- `FILTER_PROVINCE` (Opsional): Daftar nama provinsi yang ingin dipantau, dipisahkan dengan koma. Kosongkan jika ingin menerima notifikasi dari seluruh Indonesia.
+### Keterangan Parameter
+
+| Parameter | Wajib | Keterangan |
+|---|---|---|
+| `WA_GATEWAY_URL` | Ya | URL endpoint WhatsApp Gateway (`/send/message`). |
+| `WA_TARGET_PHONE` | Ya | Nomor tujuan atau Group ID WhatsApp. |
+| `WA_USER` | Tidak | Username Basic Auth untuk gateway (jika ada). |
+| `WA_PASSWORD` | Tidak | Password Basic Auth untuk gateway (jika ada). |
+| `FILTER_PROVINCE` | Tidak | Daftar provinsi yang dipantau, dipisahkan koma. Kosongkan untuk seluruh Indonesia. |
 
 ## Cara Penggunaan
 
-1.  Pastikan dependensi telah terunduh:
-    ```bash
-    go mod tidy
-    ```
+### Lokal
 
-2.  Jalankan aplikasi:
-    ```bash
-    go run cmd/main.go
-    ```
+```bash
+go mod tidy
+go run cmd/main.go
+```
 
-3.  Aplikasi akan secara otomatis membuat berkas `history.json` untuk menyimpan riwayat peringatan yang telah diproses.
+### Docker Compose
+
+```bash
+docker compose up -d
+```
+
+Pastikan WhatsApp Gateway dan bot berada di network Docker yang sama (`infobmkg-bot-net`).
 
 ## Struktur Direktori
 
-- `cmd/`: Berisi titik masuk (entry point) aplikasi.
-- `internal/`: Berisi logika inti aplikasi yang terbagi menjadi modul-modul:
-    - `bmkg`: Klien HTTP untuk berinteraksi dengan layanan data BMKG.
-    - `bot`: Layanan penghubung dengan API Telegram.
-    - `model`: Definisi struktur data XML (CAP).
-    - `storage`: Manajemen penyimpanan riwayat data.
+```
+data-cap/
+├── cmd/
+│   └── main.go              # Entry point, polling loop, & notification logic
+├── internal/
+│   ├── bmkg/
+│   │   └── client.go         # HTTP client untuk RSS feed & CAP XML BMKG
+│   ├── model/
+│   │   └── types.go          # Definisi struct XML (RSS, CAP Alert)
+│   ├── storage/
+│   │   └── history.go        # Penyimpanan riwayat alert (file-based)
+│   └── whatsapp/
+│       └── client.go         # Client WhatsApp Gateway (text & image)
+├── Dockerfile                # Multi-stage build
+├── docker-compose.yml        # Konfigurasi deployment
+├── .env.example              # Template environment variable
+└── history.json              # Riwayat alert (auto-generated, gitignored)
+```
 
 ## Lisensi dan Penafian
 
-Aplikasi ini disediakan sebagai alat bantu distribusi informasi. Pengguna wajib tetap merujuk pada kanal informasi resmi BMKG untuk keputusan-keputusan krusial terkait keselamatan. Pengembang aplikasi tidak bertanggung jawab atas keterlambatan atau ketidakakuratan data yang mungkin terjadi akibat gangguan jaringan atau perubahan format data dari sumber aslinya.
+Aplikasi ini disediakan sebagai alat bantu distribusi informasi. Pengguna wajib tetap merujuk pada kanal informasi resmi BMKG untuk keputusan krusial terkait keselamatan. Pengembang tidak bertanggung jawab atas keterlambatan atau ketidakakuratan data yang mungkin terjadi akibat gangguan jaringan atau perubahan format data dari sumber aslinya.

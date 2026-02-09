@@ -1,27 +1,41 @@
-# Initial Release - BMKG Weather Alert Bot (v1.0.0)
+# Release Notes
 
-This is the initial release of the **BMKG Weather Alert Bot**, a lightweight Telegram bot application written in Go designed to monitor and distribute real-time weather alerts from the Indonesian Agency for Meteorology, Climatology, and Geophysics (BMKG).
+## v1.1.0 — Link-Based Deduplication Fix (2026-02-10)
 
-This version operates as a **single-target broadcaster**, making it suitable for personal use or dedicated weather monitoring groups.
+### Bug Fix
 
-### Key Features
+- **Fixed duplicate alert notifications**: BMKG GUID mengandung timestamp jam yang berubah setiap kali feed di-refresh, menyebabkan alert yang sama dikirim berulang kali. Unique key sekarang menggunakan alert **Link** (contoh: `CYG20260209009_alert.xml`) yang stabil per event.
 
-*   **Real-time Monitoring**: Automatically polls the BMKG RSS feed at configurable intervals (default: every 3 minutes) to detect new weather warnings.
-*   **Visual Alert Support**: Capable of retrieving and distributing official infographic maps directly from the CAP (Common Alerting Protocol) data source when available.
-*   **Province Filtering**: Includes a configuration option via environment variables to filter notifications based on specific provinces.
-*   **Reliable Delivery**: Implements a direct image upload mechanism to ensure successful delivery of infographics, bypassing potential external link issues in Telegram.
-*   **Lightweight Persistence**: Utilizes a file-based storage system (`history.json`) to track processed alerts and prevent duplicate notifications without requiring a heavy database engine.
-*   **Docker Integration**: Fully containerized with a multi-stage Dockerfile and Docker Compose configuration for easy deployment.
+### Breaking Changes
 
-### Current Limitations
+- Format `history.json` berubah dari GUID-based ke Link-based. Pada deploy pertama setelah update, alert yang masih aktif di RSS feed akan dikirim ulang sekali.
 
-*   **Single Broadcast Target**: Currently supports broadcasting only to a single destination (`TARGET_CHAT_ID`) defined in the configuration.
-*   **No Interactive Subscription**: Does not yet support multi-user management or dynamic subscription commands via chat interface.
+---
+
+## v1.0.0 — WhatsApp Edition (2026-02-03)
+
+### Highlights
+
+Rilis pertama bot peringatan dini cuaca BMKG dengan distribusi notifikasi melalui **WhatsApp Gateway**.
+
+### Features
+
+- **Real-time Monitoring**: Polling otomatis RSS feed BMKG setiap 3 menit.
+- **WhatsApp Notification**: Pengiriman alert ke nomor individu atau grup WhatsApp via WhatsApp Gateway API.
+- **Visual Alert**: Menyertakan infografis resmi BMKG dari data CAP (Common Alerting Protocol) jika tersedia.
+- **Province Filtering**: Filter notifikasi berdasarkan provinsi melalui environment variable `FILTER_PROVINCE`.
+- **Auto-Retry & Self-Healing**: Retry otomatis untuk HTTP request, serta reconnect otomatis jika sesi WhatsApp Gateway terputus.
+- **Dry Run Mode**: Mode console-only jika konfigurasi WhatsApp tidak diset, untuk pengujian lokal.
+- **Lightweight Persistence**: Penyimpanan riwayat alert berbasis file (`history.json`) tanpa database.
+- **Docker Integration**: Multi-stage Dockerfile dan Docker Compose untuk deployment di VPS.
+
+### Limitations
+
+- **Single Broadcast Target**: Saat ini hanya mendukung pengiriman ke satu tujuan (nomor/grup) yang dikonfigurasi di `.env`.
+- **No Interactive Commands**: Belum mendukung manajemen multi-user atau perintah interaktif via chat.
 
 ### Deployment
 
-1.  Configure the `.env` file with your Telegram Bot Token and Target Chat ID.
-2.  Deploy using Docker Compose:
-    ```bash
-    docker-compose up -d
-    ```
+```bash
+docker compose up -d
+```
