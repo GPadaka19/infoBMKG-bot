@@ -101,9 +101,12 @@ func processUpdate(client *bmkg.Client, history *storage.History, waClient *what
 	newCount := 0
 
 	for _, item := range feed.Channel.Items {
-		guid := item.GUID.Value
-		if guid == "" {
-			guid = item.Link
+		// Use Link as unique key instead of GUID.
+		// BMKG GUIDs contain timestamps that change on feed refresh,
+		// but the alert Link (e.g. CYG20260209009_alert.xml) stays stable per event.
+		uniqueKey := item.Link
+		if uniqueKey == "" {
+			uniqueKey = item.GUID.Value // fallback
 		}
 
 		// SKIP if filtered
@@ -121,7 +124,7 @@ func processUpdate(client *bmkg.Client, history *storage.History, waClient *what
 			}
 		}
 
-		if history.IsNew(guid) {
+		if history.IsNew(uniqueKey) {
 			newCount++
 			log.Printf("New Alert Found: %s", item.Title)
 
@@ -140,7 +143,7 @@ func processUpdate(client *bmkg.Client, history *storage.History, waClient *what
 			sendNotification(waClient, item, photoURL)
 
 			// 2. Add to History (Mark as seen)
-			if err := history.Add(guid); err != nil {
+			if err := history.Add(uniqueKey); err != nil {
 				log.Printf("Error processing history: %v", err)
 			}
 		}
